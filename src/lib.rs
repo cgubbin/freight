@@ -1,6 +1,8 @@
 mod config;
+mod logger;
 
 use config::Manifest;
+use logger::Logger;
 use std::env;
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -13,6 +15,7 @@ pub type Result<T> = std::result::Result<T, BoxError>;
 pub type BoxError = Box<dyn Error>;
 
 pub fn build() -> Result<()> {
+    let mut logger = Logger::new();
     let root_dir = root_dir()?;
 
     // TODO: Recover from a configuration file
@@ -25,8 +28,8 @@ pub fn build() -> Result<()> {
     fs::create_dir_all(&target_debug)?;
 
 
-    let lib_compile = || -> Result<()> {
-        println!("compiling lib.rs");
+    let lib_compile = |logger: &mut Logger| -> Result<()> {
+        logger.compiling_crate(&manifest.crate_name); // This is new
         Rustc::builder()
             .edition(manifest.edition)
             .crate_type(CrateType::Lib)
@@ -35,12 +38,12 @@ pub fn build() -> Result<()> {
             .lib_dir(target_debug.clone())
             .done()
             .run(lib_rs.to_str().unwrap())?;
-        println!("Compiling lib.rs -- Done");
+        logger.done_compiling(); // This is new
         Ok(())
     };
 
-    let bin_compile = |externs: Vec<&str>| -> Result<()> {
-        println!("Compiling main.rs");
+    let bin_compile = |logger: &mut Logger, externs: Vec<&str>| -> Result<()> {
+        logger.compiling_bin(&manifest.crate_name); // This is new
         let mut builder = Rustc::builder()
             .edition(manifest.edition)
             .crate_type(CrateType::Bin)
@@ -53,20 +56,20 @@ pub fn build() -> Result<()> {
         }
 
         builder.done().run(main_rs.to_str().unwrap())?;
-        println!("Compiling main.rs -- Done");
+        logger.done_compiling(); // This is new
         Ok(())
     };
 
     match (lib_rs.exists(), main_rs.exists()) {
         (true, true) => {
-            lib_compile()?;
-            bin_compile(vec![&manifest.crate_name])?;
+            lib_compile(&mut logger)?;
+            bin_compile(&mut logger, vec![&manifest.crate_name])?;
         }
         (true, false) => {
-            lib_compile()?;
+            lib_compile(&mut logger)?;
         }
         (false, true) => {
-            bin_compile(vec![])?;
+            bin_compile(&mut logger, vec![])?;
         }
         (false, false) => return Err("There is nothing to compile".into()),
     }
