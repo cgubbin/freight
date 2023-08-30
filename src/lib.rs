@@ -1,3 +1,6 @@
+mod config;
+
+use config::Manifest;
 use std::env;
 use std::error::Error;
 use std::fmt::{self, Display};
@@ -11,9 +14,7 @@ pub fn build() -> Result<()> {
     let root_dir = root_dir()?;
 
     // TODO: Recover from a configuration file
-    let crate_name = root_dir
-        .file_name()
-        .ok_or::<Box<dyn Error>>("Freight was run in directory without a name.".into())?;
+    let manifest = Manifest::parse_from_file(root_dir.join("Freight.toml"))?;
 
     let lib_rs = root_dir.join("src").join("lib.rs");
     let main_rs = root_dir.join("src").join("main.rs");
@@ -25,9 +26,9 @@ pub fn build() -> Result<()> {
     let lib_compile = || -> Result<()> {
         println!("compiling lib.rs");
         Rustc::builder()
-            .edition(Edition::E2021)
+            .edition(manifest.edition)
             .crate_type(CrateType::Lib)
-            .crate_name(crate_name.to_str().unwrap())
+            .crate_name(&manifest.crate_name)
             .out_dir(target_debug.clone())
             .lib_dir(target_debug.clone())
             .done()
@@ -39,9 +40,9 @@ pub fn build() -> Result<()> {
     let bin_compile = |externs: Vec<&str>| -> Result<()> {
         println!("Compiling main.rs");
         let mut builder = Rustc::builder()
-            .edition(Edition::E2021)
+            .edition(manifest.edition)
             .crate_type(CrateType::Bin)
-            .crate_name(crate_name.to_str().unwrap())
+            .crate_name(&manifest.crate_name)
             .out_dir(target_debug.clone())
             .lib_dir(target_debug.clone());
 
@@ -57,7 +58,7 @@ pub fn build() -> Result<()> {
     match (lib_rs.exists(), main_rs.exists()) {
         (true, true) => {
             lib_compile()?;
-            bin_compile(vec![crate_name.to_str().unwrap()])?;
+            bin_compile(vec![&manifest.crate_name])?;
         }
         (true, false) => {
             lib_compile()?;
@@ -74,7 +75,7 @@ pub fn build() -> Result<()> {
 fn root_dir() -> Result<PathBuf> {
     let current_dir = env::current_dir()?;
     for ancestor in current_dir.ancestors() {
-        if ancestor.join(".git").exists() {
+        if ancestor.join("Freight.toml").exists() {
             return Ok(ancestor.into());
         }
     }
@@ -191,6 +192,7 @@ impl RustcBuilder {
 }
 
 
+#[derive(Copy, Clone)]
 pub enum Edition {
     E2015,
     E2018,
