@@ -12,4 +12,5 @@ build:
   ./target/bootstrap/freight build
 test: build
     mkdir -p target/test
+    ./target/debug/freight test ignored-arg -- --list
     ./target/debug/freight test
